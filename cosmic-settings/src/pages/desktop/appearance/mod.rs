@@ -65,6 +65,7 @@ pub struct Page {
 
     tk_config: Option<Config>,
     day_time: bool,
+    font_size: f32,
 }
 
 impl Default for Page {
@@ -94,6 +95,7 @@ impl From<theme_manager::Manager> for Page {
             theme_manager,
             tk_config,
             day_time: true,
+            font_size: cosmic::config::font_size(),
         }
     }
 }
@@ -125,7 +127,9 @@ pub enum Message {
     Autoswitch(bool),
     DarkMode(bool),
     Density(Density),
+    FontSize(f32),
     ThemeModeUpdate(ThemeMode),
+    TkConfig(CosmicTk),
 
     DrawerOpen(ContextView),
     DrawerColor(ColorPickerUpdate),
@@ -269,6 +273,18 @@ impl Page {
                 tokio::task::spawn(async move {
                     Self::update_panel_spacing(density);
                 });
+            }
+
+            Message::FontSize(size) => {
+                self.font_size = size;
+
+                if let Some(config) = self.tk_config.as_mut() {
+                    _ = config.set("font_size", size);
+                }
+            }
+
+            Message::TkConfig(config) => {
+                self.font_size = config.font_size;
             }
 
             Message::Left => {}
@@ -752,14 +768,23 @@ impl page::Page<crate::pages::Message> for Page {
     }
 
     fn subscription(&self, core: &cosmic::Core) -> Subscription<crate::pages::Message> {
-        // Keep the Appearance page in sync when the daemon auto-switches light/dark.
-        core.watch_config::<ThemeMode>("com.system76.CosmicTheme.Mode")
-            .map(|update| {
+        // Keep the Appearance page in sync when the daemon auto-switches light/dark,
+        // or when the toolkit config changes from elsewhere.
+        Subscription::batch([
+            core.watch_config::<ThemeMode>("com.system76.CosmicTheme.Mode")
+                .map(|update| {
+                    for why in update.errors {
+                        tracing::error!(?why, "theme mode config load error");
+                    }
+                    crate::pages::Message::Appearance(Message::ThemeModeUpdate(update.config))
+                }),
+            core.watch_config::<CosmicTk>(cosmic::config::ID).map(|update| {
                 for why in update.errors {
-                    tracing::error!(?why, "theme mode config load error");
+                    tracing::error!(?why, "CosmicTk config load error");
                 }
-                crate::pages::Message::Appearance(Message::ThemeModeUpdate(update.config))
-            })
+                crate::pages::Message::Appearance(Message::TkConfig(update.config))
+            }),
+        ])
     }
 
     fn context_drawer(&self) -> Option<ContextDrawer<'_, crate::pages::Message>> {
@@ -848,6 +873,7 @@ pub fn experimental() -> Section<crate::pages::Message> {
     crate::slab!(descriptions {
         interface_font_txt = fl!("interface-font");
         monospace_font_txt = fl!("monospace-font");
+        font_size_txt = fl!("font-size");
         icons_and_toolkit_txt = fl!("icons-and-toolkit");
         shadow_and_corners_txt = fl!("shadow-and-corners");
     });
@@ -870,6 +896,23 @@ pub fn experimental() -> Section<crate::pages::Message> {
                 Message::DrawerOpen(ContextView::MonospaceFont),
             );
 
+            let font_size = settings::item::builder(&descriptions[font_size_txt])
+                .description(fl!("font-size", "desc"))
+                .flex_control({
+                    row::with_children(vec![
+                        widget::slider(10.0..=20.0, page.font_size, Message::FontSize)
+                            .step(1.0)
+                            .width(Length::Fill)
+                            .apply(container)
+                            .max_width(250)
+                            .into(),
+                        text::body(format!("{} px", page.font_size.round() as u32)).into(),
+                    ])
+                    .align_y(Alignment::Center)
+                    .spacing(8)
+                    .width(Length::Fill)
+                });
+
             let icons_and_toolkit = crate::widget::go_next_item(
                 &descriptions[icons_and_toolkit_txt],
                 Message::DrawerOpen(ContextView::IconsAndToolkit),
@@ -879,6 +922,7 @@ pub fn experimental() -> Section<crate::pages::Message> {
                 .title(&*section.title)
                 .add(system_font)
                 .add(mono_font)
+                .add(font_size)
                 .add(icons_and_toolkit);
 
             #[cfg(feature = "cosmic-comp-config")]

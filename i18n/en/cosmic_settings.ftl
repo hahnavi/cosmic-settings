@@ -440,6 +440,8 @@ window-management-appearance = Window management
 ### Experimental
 
 experimental-settings = Experimental settings
+font-size = Font size
+    .desc = The size of the system font, in pixels
 icons-and-toolkit = Icons and toolkit theming
 interface-font = System font
 monospace-font = Monospace font
