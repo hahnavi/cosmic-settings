@@ -367,12 +367,11 @@ impl Page {
 
             #[cfg(feature = "xdg-portal")]
             Message::ImportFile(f) => {
-                let path_res =
-                    f.0.0
-                        .uris()
-                        .first()
-                        .filter(|f| f.scheme() == "file")
-                        .and_then(|f| f.to_file_path().ok());
+                let path_res = if f.0.url().scheme() == "file" {
+                    f.0.url().to_file_path().ok()
+                } else {
+                    None
+                };
 
                 let Some(path) = path_res else {
                     return Task::none();
@@ -392,12 +391,11 @@ impl Page {
 
             #[cfg(feature = "xdg-portal")]
             Message::ExportFile(f) => {
-                let path_res =
-                    f.0.0
-                        .uris()
-                        .first()
-                        .filter(|f| f.scheme() == "file")
-                        .and_then(|f| f.to_file_path().ok());
+                let path_res = f
+                    .0
+                    .url()
+                    .filter(|f| f.scheme() == "file")
+                    .and_then(|f| f.to_file_path().ok());
 
                 let Some(path) = path_res else {
                     return Task::none();

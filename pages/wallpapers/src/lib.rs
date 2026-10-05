@@ -121,7 +121,6 @@ pub async fn load_each_from_path(
                         false
                     }
                 } else {
-                    eprintln!("is jxl");
                     true
                 };
 
